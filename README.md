@@ -1,163 +1,102 @@
-﻿# Basketball Dribble Analysis
+# Basketball Dribble Analysis
 
-Computer vision assignment project for analyzing a basketball dribbling video.
+Computer vision project for analyzing basketball dribbling video with a reusable analysis core, API, and Python UIs.
 
 ## Project Structure
 
 ```text
 Basketball Dribble Analysis/
-├── Code/
-│   └── Code.py
-├── dataset/
-│   └── WHATSAAP ASSIGNMENT.mp4
-└── Internship _Assignment.pdf
++-- Code/
+�   +-- Code.py
+�   +-- api.py
+�   +-- streamlit_app.py
+�   +-- ui.py
++-- dataset/
+�   +-- WHATSAAP ASSIGNMENT.mp4
++-- Internship _Assignment.pdf
+
+ARCHITECTURE.md
+FLOW.md
+CHANGELOG.md
+README.md
 ```
 
-## Objective
+## Documentation
 
-Extract measurable dribbling insights from video frames using computer vision techniques.
+- Architecture: `ARCHITECTURE.md`
+- Flow: `FLOW.md`
+- Change history: `CHANGELOG.md`
 
-## Current Implementation (Code/Code.py)
+## Core Engine
 
-The current pipeline follows this flow:
+Main reusable function:
 
-1. Load video with OpenCV `VideoCapture`
-2. Read frames in a loop (up to `max_frames = 1000`)
-3. Detect dribble-like events using:
-   - grayscale conversion
-   - Gaussian blur
-   - Canny edge detection
-   - Hough line transform
-4. Compute frame-level speed estimate
-5. Print frame-wise logs and total dribble count
+- `analyze_video(...)` in `Basketball Dribble Analysis/Code/Code.py`
+
+Pipeline highlights:
+
+- candidate detection (HSV + contours + Hough circles)
+- Kalman tracking
+- trajectory-based bounce detection
+- speed estimation and smoothing
+- optional annotated video output
 
 ## Dependencies
 
 - Python 3.8+
-- OpenCV (`opencv-python`)
-- NumPy
-- FastAPI (`fastapi`)
-- Uvicorn (`uvicorn`)
+- opencv-python
+- numpy
+- fastapi
+- uvicorn
+- python-multipart
+- streamlit
 
-Install:
+Install all:
 
 ```bash
-pip install opencv-python numpy fastapi uvicorn
+pip install opencv-python numpy fastapi uvicorn python-multipart streamlit
 ```
 
-## FastAPI Server
+## CLI Run
 
-API file:
+```bash
+python "Basketball Dribble Analysis/Code/Code.py" --max-frames 1000
+```
 
-- `Basketball Dribble Analysis/Code/api.py`
-
-Run server:
+## FastAPI Run
 
 ```bash
 python -m uvicorn api:app --app-dir "Basketball Dribble Analysis/Code" --reload
 ```
 
-Endpoints:
+Open:
 
+- `http://127.0.0.1:8000/docs`
+
+Key endpoints:
+
+- `GET /`
 - `GET /health`
 - `POST /analyze`
-- `POST /analyze-input` (video path, video URL, or upload file)
+- `POST /analyze-input` (path/url/upload)
 
-Sample request:
-
-```bash
-curl -X POST "http://127.0.0.1:8000/analyze" ^
-  -H "Content-Type: application/json" ^
-  -d "{\"video_path\":\"Basketball Dribble Analysis/dataset/WHATSAAP ASSIGNMENT.mp4\",\"max_frames\":1000}"
-```
-
-For link or file upload (open `/docs` and use `POST /analyze-input`), or use curl with multipart:
-
-```bash
-curl -X POST "http://127.0.0.1:8000/analyze-input" ^
-  -F "max_frames=1000" ^
-  -F "video_url=https://example.com/sample.mp4"
-```
-
-## Python UI (Tkinter)
-
-UI file:
-
-- `Basketball Dribble Analysis/Code/ui.py`
-
-Run UI:
-
-```bash
-python "Basketball Dribble Analysis/Code/ui.py"
-```
-
-Features:
-
-- Select input video from file picker
-- Set max frames
-- Optionally save annotated output video
-- Run analysis and view result metrics in app window
-
-## Streamlit UI
-
-UI file:
-
-- `Basketball Dribble Analysis/Code/streamlit_app.py`
-
-Install:
-
-```bash
-pip install streamlit
-```
-
-Run:
+## Streamlit UI Run
 
 ```bash
 python -m streamlit run "Basketball Dribble Analysis/Code/streamlit_app.py"
 ```
 
-Supports:
+Open:
 
-- Video path input
-- Video URL input
-- Video file upload
+- `http://127.0.0.1:8501`
 
-## How To Run
+## Tkinter UI Run
 
-### Important Note
+```bash
+python "Basketball Dribble Analysis/Code/ui.py"
+```
 
-`Code/Code.py` is currently a Jupyter notebook export in JSON format (not a clean Python script). Running it directly with `python Code.py` can fail.
+## Notes
 
-Recommended options:
-
-1. Open it in Jupyter/VS Code Notebook and run cells.
-2. Convert/refactor it into a standard `.py` script before CLI execution.
-
-## Known Issues
-
-- Hardcoded absolute video path inside code
-- `start_time` usage is not initialized in the execution block
-- Dribble detection logic is line-based and may overcount
-- Ball speed formula uses a fixed scale factor without calibration
-
-## Suggested Improvements
-
-- Use project-relative paths
-- Add robust ball detection + tracking
-- Detect bounce events from trajectory instead of edge lines
-- Calibrate pixel-to-meter ratio for realistic speed
-- Save outputs to CSV/JSON and annotated video
-- Add modular project files and tests
-
-## Evaluation Alignment
-
-This project is documented against typical internship criteria:
-
-- analysis accuracy/effectiveness
-- code quality and optimization
-- documentation clarity
-- creativity in additional metrics
-
-## License
-
-For educational and internship evaluation use.
+- Generated `.mp4` outputs and Python cache are ignored via `.gitignore`.
+- Use `POST /analyze-input` in Swagger for easiest upload-based testing.
