@@ -36,12 +36,91 @@ The current pipeline follows this flow:
 - Python 3.8+
 - OpenCV (`opencv-python`)
 - NumPy
+- FastAPI (`fastapi`)
+- Uvicorn (`uvicorn`)
 
 Install:
 
 ```bash
-pip install opencv-python numpy
+pip install opencv-python numpy fastapi uvicorn
 ```
+
+## FastAPI Server
+
+API file:
+
+- `Basketball Dribble Analysis/Code/api.py`
+
+Run server:
+
+```bash
+python -m uvicorn api:app --app-dir "Basketball Dribble Analysis/Code" --reload
+```
+
+Endpoints:
+
+- `GET /health`
+- `POST /analyze`
+- `POST /analyze-input` (video path, video URL, or upload file)
+
+Sample request:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/analyze" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"video_path\":\"Basketball Dribble Analysis/dataset/WHATSAAP ASSIGNMENT.mp4\",\"max_frames\":1000}"
+```
+
+For link or file upload (open `/docs` and use `POST /analyze-input`), or use curl with multipart:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/analyze-input" ^
+  -F "max_frames=1000" ^
+  -F "video_url=https://example.com/sample.mp4"
+```
+
+## Python UI (Tkinter)
+
+UI file:
+
+- `Basketball Dribble Analysis/Code/ui.py`
+
+Run UI:
+
+```bash
+python "Basketball Dribble Analysis/Code/ui.py"
+```
+
+Features:
+
+- Select input video from file picker
+- Set max frames
+- Optionally save annotated output video
+- Run analysis and view result metrics in app window
+
+## Streamlit UI
+
+UI file:
+
+- `Basketball Dribble Analysis/Code/streamlit_app.py`
+
+Install:
+
+```bash
+pip install streamlit
+```
+
+Run:
+
+```bash
+python -m streamlit run "Basketball Dribble Analysis/Code/streamlit_app.py"
+```
+
+Supports:
+
+- Video path input
+- Video URL input
+- Video file upload
 
 ## How To Run
 
