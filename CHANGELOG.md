@@ -21,6 +21,37 @@ All notable changes to this project are documented in this file.
 ### Fixed
 - `POST /analyze` now preserves intentional `HTTPException` responses (for example invalid backend input stays `400` instead of being wrapped as `500`).
 
+## [2026-03-09] - API Production Hardening
+
+### Added
+- Request middleware for traceability and performance headers:
+  - `x-request-id`
+  - `x-process-time-ms`
+- New readiness endpoint `GET /ready` with `503` on missing required assets.
+- Upload safety controls:
+  - extension allow-list,
+  - content-type allow-list,
+  - max upload size enforcement via `MAX_UPLOAD_BYTES`.
+- Shared helper functions for path resolution and backend validation.
+
+### Changed
+- Unified path/output resolution across endpoints.
+- Added form validation bounds for YOLO fields in `/analyze-input`.
+- Health response now includes `version` and `uptime_seconds`.
+
+## [2026-03-09] - API Security and Traffic Controls
+
+### Added
+- Optional API key authentication (`x-api-key`) controlled by env:
+  - `ENABLE_API_KEY_AUTH`
+  - `API_KEY`
+- Per-IP in-memory rate limiting with configurable threshold:
+  - `RATE_LIMIT_PER_MINUTE`
+- CORS middleware with env-driven controls:
+  - `CORS_ORIGINS`
+  - `CORS_ALLOW_CREDENTIALS`
+- Standardized error payload includes `request_id`.
+
 ## [2026-03-08] - Advanced Dribble Analysis + API + UIs
 
 ### Added

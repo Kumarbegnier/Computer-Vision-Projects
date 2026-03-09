@@ -119,6 +119,7 @@ python "Basketball Dribble Analysis/Code/benchmark_models.py" --max-frames 1520
 
 - `GET /` service info
 - `GET /health` liveness
+- `GET /ready` readiness (returns `503` when required assets are missing)
 - `GET /favicon.ico` no-content
 - `POST /analyze` JSON request body
 - `POST /analyze-input` form-data (`video_path` or `video_url` or `video_file`)
@@ -141,6 +142,15 @@ python "Basketball Dribble Analysis/Code/benchmark_models.py" --max-frames 1520
 - `detector_backend`, `tracker_backend`
 - `warnings` (fallback/dependency/runtime notes)
 
+### Production behavior
+
+- Response headers include:
+  - `x-request-id` (request tracing)
+  - `x-process-time-ms` (server processing time)
+- In-memory per-IP rate limit is applied on non-public routes.
+- Optional API key auth is supported via `x-api-key` request header.
+- Uploads are validated by extension/content-type and capped by `MAX_UPLOAD_BYTES` env.
+
 ## Optional Dependency Notes
 
 - `ultralytics` needed for YOLO backend
@@ -150,8 +160,31 @@ python "Basketball Dribble Analysis/Code/benchmark_models.py" --max-frames 1520
 
 If optional packages are missing, the pipeline degrades to safe defaults (`classic + kalman`) with warning messages.
 
+## Important Env Vars
+
+- `LOG_LEVEL` (default `INFO`)
+- `APP_VERSION` (default `1.1.0`)
+- `MAX_UPLOAD_BYTES` (default `209715200`, i.e. 200MB)
+- `RATE_LIMIT_PER_MINUTE` (default `60`)
+- `ENABLE_API_KEY_AUTH` (`true/false`, default `false`)
+- `API_KEY` (required when auth enabled)
+- `CORS_ORIGINS` (default `*`, comma-separated allowed origins)
+- `CORS_ALLOW_CREDENTIALS` (`true/false`, default `false`)
+
 ## Notes
 
 - `.env` and `.venv/` are ignored via `.gitignore`.
 - Generated `.mp4` outputs are git-ignored.
 - For quick API testing, use Swagger UI (`/docs`) and `POST /analyze-input`.
+
+## Contact
+
+- Name: Neeraj Kumar
+- Email: cuk18neeraj@gmail.com
+- GitHub: https://github.com/Kumarbegnier
+- LinkedIn: https://www.linkedin.com/in/neeraj-kumar-b18a20185/
+- YouTube: https://www.youtube.com/@ECEResearcher
+
+Some of my work includes AI chatbot systems, backend APIs using FastAPI, automation pipelines, and computer vision experiments.
+
+If required, I can also share a demo video of a working project.
