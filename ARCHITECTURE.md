@@ -1,161 +1,146 @@
 # Architecture
 
-## 1) System Goal
+## 1) Goal
 
-Production-ready basketball dribble analytics with:
-- robust detection (YOLO / Triton / classic fallback),
-- robust tracking (BoT-SORT / ByteTrack / DeepSORT / Kalman),
-- custom bounce logic,
-- multiple runtime interfaces (CLI, API, Streamlit),
-- deployment paths (TensorRT, Triton, DeepStream 8).
+Provide a single dribble-analysis engine that can run consistently across:
 
-## 2) High-Level Layout
+- local CLI workflows,
+- API service usage,
+- Streamlit and Tkinter UIs,
+- production-style inference stacks (YOLO, Triton, DeepStream templates).
 
-Core code:
+## 2) Component Map
+
+### Core analysis
+
 - `Basketball Dribble Analysis/Code/Code.py`
-- `Basketball Dribble Analysis/Code/api.py`
-- `Basketball Dribble Analysis/Code/streamlit_app.py`
-- `Basketball Dribble Analysis/Code/io_utils.py`
+  - `analyze_video(...)` main orchestration
+  - classic detector (`HSV + contour + Hough`)
+  - optional YOLO detector
+  - optional Triton detector
+  - Kalman state tracking
+  - bounce and speed estimation
 
-Deployment code:
+### Interface layer
+
+- `Basketball Dribble Analysis/Code/api.py` (FastAPI)
+- `Basketball Dribble Analysis/Code/streamlit_app.py` (web dashboard)
+- `Basketball Dribble Analysis/Code/ui.py` (Tkinter desktop app)
+
+### IO/security helpers
+
+- `Basketball Dribble Analysis/Code/io_utils.py`
+  - remote URL validation
+  - safe temporary download handling
+
+### Ops and deployment assets
+
+- `Basketball Dribble Analysis/Code/benchmark_models.py`
 - `Basketball Dribble Analysis/Deployment/TRAINING/*`
 - `Basketball Dribble Analysis/Deployment/TRITON/*`
 - `Basketball Dribble Analysis/Deployment/DEEPSTREAM/*`
+- `run_full_stack.ps1`
 
-## 3) Runtime Architecture
+## 3) Runtime Pipeline (`analyze_video`)
 
-### 3.1 Inference Pipeline
+Per frame:
 
-Per frame flow in `analyze_video(...)`:
-1. Frame read
-2. Detection backend
-- `classic`: HSV + contour + Hough circle
-- `yolo`: local Ultralytics model (`YOLO.predict/track`)
-- `triton`: Triton HTTP inference client
-3. Tracking backend
-- `kalman` (always available)
-- `bytetrack` / `botsort` (via YOLO track mode)
-- `deepsort` (optional external tracker path)
-4. Kalman smoothing (`BallTracker`)
-5. Metrics update (speed, misses, radius stats)
-6. Bounce estimation from `y` trajectory peaks
-7. Optional annotated video write
+1. Read frame from OpenCV capture.
+2. Predict next position using Kalman filter.
+3. Run detector backend:
+   - `classic`: color + shape + motion scoring
+   - `yolo`: Ultralytics model (`predict`/`track`)
+   - `triton`: HTTP inference client (`images -> detections`)
+4. Optional external tracker handling (when compatible and available).
+5. Select measurement with distance/score/motion cost.
+6. Update Kalman state.
+7. Update metrics:
+   - missed detections,
+   - speed (px/s and approx m/s),
+   - y-history for bounce estimation.
+8. Draw overlays and optionally write output video frame.
+9. Finalize summary payload and warnings.
 
-### 3.2 Backend Selection Rules
+## 4) Backend Compatibility Rules
 
-- If requested backend dependency is missing, system falls back to `classic + kalman`.
-- Fallback reasons are returned in `warnings` field.
-- This keeps API/UI stable in partially provisioned environments.
+- If YOLO/Triton dependency is unavailable, detector falls back to `classic`.
+- If requested tracker is incompatible with active detector, tracker falls back to `kalman`.
+- Fallback causes are returned in `warnings`.
 
-## 4) Interface Layer
+Current practical rules:
 
-### CLI
+- Non-YOLO detector with `bytetrack`/`botsort`/`deepsort` -> fallback to `kalman`.
+- Triton with advanced trackers -> fallback to `kalman`.
+- YOLO + DeepSORT attempts external tracker; on failure -> fallback to `kalman`.
 
-`Code.py` CLI options expose:
-- `detector_backend`
-- `tracker_backend`
-- `yolo_model`
-- `triton_url`
-- `triton_model_name`
+## 5) API Design
 
-### API (FastAPI)
+### Endpoints
 
-`api.py` endpoints:
-- `GET /health`
-- `POST /analyze`
-- `POST /analyze-input`
+- `GET /` service metadata
+- `GET /health` liveness
+- `GET /favicon.ico` no-content
+- `POST /analyze` JSON body contract
+- `POST /analyze-input` form input for path/url/upload
 
-API supports:
-- local path / upload / URL input,
-- secure URL handling via `io_utils.py`,
-- same backend knobs as CLI,
-- validation + cleanup + error mapping.
+### Input contracts
 
-### Streamlit
+- `max_frames` range: `1000..5000`
+- exactly one source for `/analyze-input`: `video_path` OR `video_url` OR `video_file`
 
-`streamlit_app.py` provides:
-- Path/URL/Upload input,
-- runtime backend selectors,
-- model/server config inputs,
-- metric dashboard + warnings + run history.
+### Error mapping
 
-## 5) Data Contracts
+- 400 for validation/value errors,
+- 404 for missing files,
+- 500 for runtime failures.
 
-Primary analysis output:
+## 6) Data Contract (Output)
+
+Typical response fields:
 
 ```json
 {
-  "video_path": "...",
+  "video_path": "C:/.../video.mp4",
   "processed_frames": 1520,
-  "estimated_bounces": 102,
-  "missed_detections": 2,
-  "average_smoothed_speed_m_s": 2.69,
-  "elapsed_seconds": 63.36,
-  "processing_seconds": 8.9,
-  "detector_backend": "classic",
+  "estimated_bounces": 101,
+  "missed_detections": 4,
+  "average_smoothed_speed_m_s": 2.51,
+  "elapsed_seconds": 63.333,
+  "processing_seconds": 8.41,
+  "detector_backend": "yolo",
   "tracker_backend": "kalman",
   "triton_url": "",
   "triton_model_name": "",
+  "yolo_conf": 0.08,
+  "yolo_iou": 0.5,
+  "yolo_imgsz": 960,
+  "yolo_class_id": 32,
+  "yolo_class_fallback": true,
   "warnings": []
 }
 ```
 
-## 6) Training and Optimization Architecture
+## 7) Security and Reliability Controls
 
-### 6.1 Fine-tuning
+- URL scheme restriction (`http/https`) for remote inputs.
+- DNS/IP validation to avoid private/unsafe hosts.
+- Remote size cap (`200 MB`) and timeout-based download guard.
+- Temporary file cleanup in API/Streamlit upload and URL flows.
+- Degraded but stable execution when optional dependencies are missing.
 
-- Script: `Deployment/TRAINING/train_finetune.py`
-- Dataset contract: `Deployment/TRAINING/data.yaml`
-- Output: trained YOLO checkpoint (`best.pt`)
+## 8) Production Paths
 
-### 6.2 TensorRT
+1. Training and export:
+   - `Deployment/TRAINING/train_finetune.py`
+   - `Deployment/TRAINING/export_tensorrt.py`
+2. Triton serving template:
+   - `Deployment/TRITON/model_repository/basketball_yolo_trt`
+3. DeepStream configuration templates:
+   - `Deployment/DEEPSTREAM/deepstream_app_config.txt`
+   - `Deployment/DEEPSTREAM/config_infer_primary_yolo.txt`
 
-- Script: `Deployment/TRAINING/export_tensorrt.py`
-- Output: TensorRT plan (`model.plan`)
+## 9) Recommended Modes
 
-## 7) Serving Architecture
-
-### 7.1 Triton
-
-- Model repo template:
-`Deployment/TRITON/model_repository/basketball_yolo_trt`
-- Config:
-`config.pbtxt` with `images -> detections` contract
-- Client example:
-`Deployment/TRITON/client/infer_http.py`
-
-### 7.2 DeepStream 8
-
-Templates:
-- `Deployment/DEEPSTREAM/deepstream_app_config.txt`
-- `Deployment/DEEPSTREAM/config_infer_primary_yolo.txt`
-
-DeepStream pipeline path is for GPU-native, low-latency production streaming.
-
-## 8) Reliability and Security Controls
-
-- URL ingestion validation blocks unsafe/private hosts.
-- Size limits and timeout on remote downloads.
-- Temp file lifecycle cleanup.
-- Graceful degradation when optional dependencies are unavailable.
-
-## 9) Recommended Production Modes
-
-1. Best practical local mode:
-- `detector_backend=yolo`
-- `tracker_backend=botsort`
-
-2. Scalable service mode:
-- `detector_backend=triton`
-- `tracker_backend=kalman` (or DS pipeline if using DeepStream end-to-end)
-
-3. Guaranteed fallback mode:
-- `detector_backend=classic`
-- `tracker_backend=kalman`
-
-## 10) Next Engineering Steps
-
-- Add unit tests for backend selection and bounce logic.
-- Add regression suite with labeled clips.
-- Add structured logging and request IDs in API.
-- Add async job queue for long videos (`job_id` + status polling).
+1. Baseline reliability: `classic + kalman`
+2. Local quality/performance: `yolo + botsort` (or `yolo + kalman`)
+3. Service inference at scale: `triton + kalman`
