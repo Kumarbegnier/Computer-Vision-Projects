@@ -3,12 +3,11 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import urlparse
-from urllib.request import urlretrieve
 
 import streamlit as st
 
 from Code import analyze_video
+from io_utils import download_video_to_temp_file, validate_remote_video_url
 
 
 def resolve_video_path(
@@ -30,14 +29,8 @@ def resolve_video_path(
         return candidate, temp_file, "path"
 
     if input_mode == "URL":
-        if not url_value.strip():
-            raise ValueError("Video URL is empty.")
-        parsed = urlparse(url_value.strip())
-        suffix = Path(parsed.path).suffix or ".mp4"
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-        tmp.close()
-        temp_file = Path(tmp.name)
-        urlretrieve(url_value.strip(), str(temp_file))
+        safe_url = validate_remote_video_url(url_value)
+        temp_file = download_video_to_temp_file(safe_url)
         return temp_file, temp_file, "url"
 
     if upload_value is None:
@@ -65,26 +58,44 @@ def get_quality_label(result: Dict[str, Any]) -> Tuple[str, float]:
     return "Needs tuning", detected_ratio
 
 
+def build_report_line(result: Dict[str, Any], quality_label: str, quality_score: float) -> str:
+    return (
+        f"Processed Frames: {result['processed_frames']}, "
+        f"Estimated Bounces: {result['estimated_bounces']}, "
+        f"Missed Detections: {result['missed_detections']}, "
+        f"Avg Speed: {result['average_smoothed_speed_m_s']:.2f} m/s, "
+        f"Elapsed: {result['elapsed_seconds']:.2f} s, "
+        f"Tracking Quality: {quality_label} (~{quality_score * 100:.1f}%)"
+    )
+
+
 def main() -> None:
     st.set_page_config(page_title="Basketball Dribble Analysis", layout="wide")
     st.markdown(
         """
         <style>
+        @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700&family=Nunito:wght@400;600;800&display=swap');
+
         .stApp {
-            background: radial-gradient(circle at 20% 20%, #ffe4ec 0%, #fdf2f8 30%, #f5f3ff 65%, #eef2ff 100%);
+            font-family: 'Nunito', sans-serif;
+            background:
+                radial-gradient(1200px 500px at 15% -10%, rgba(251, 113, 133, 0.35), transparent 60%),
+                radial-gradient(1000px 500px at 95% 0%, rgba(167, 139, 250, 0.35), transparent 60%),
+                linear-gradient(160deg, #fff7ed 0%, #fef2f2 40%, #fdf2f8 72%, #f5f3ff 100%);
         }
         .title-wrap {
-            padding: 0.9rem 1rem;
-            border-radius: 20px;
-            background: linear-gradient(135deg, #fb7185 0%, #f472b6 45%, #a78bfa 100%);
+            padding: 1rem 1.1rem;
+            border-radius: 22px;
+            background: linear-gradient(135deg, #fb7185 0%, #f472b6 35%, #a78bfa 100%);
             color: #fff7fb;
-            margin-bottom: 1rem;
-            box-shadow: 0 10px 30px rgba(244, 114, 182, 0.25);
+            margin-bottom: 1.1rem;
+            box-shadow: 0 14px 34px rgba(244, 114, 182, 0.25);
             border: 1px solid rgba(255, 255, 255, 0.35);
         }
         .title-wrap h1 {
             margin: 0;
-            font-size: 1.8rem;
+            font-family: 'Baloo 2', cursive;
+            font-size: 2rem;
             letter-spacing: 0.2px;
         }
         .title-wrap p {
@@ -99,12 +110,29 @@ def main() -> None:
             margin-bottom: 0.8rem;
             box-shadow: 0 6px 18px rgba(244, 114, 182, 0.12);
         }
+        .report-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(254,242,242,0.95));
+            border: 1px solid #fda4af;
+            border-radius: 16px;
+            padding: 0.8rem 0.95rem;
+            box-shadow: 0 8px 20px rgba(251, 113, 133, 0.12);
+            margin-top: 0.7rem;
+        }
+        .report-title {
+            font-weight: 800;
+            color: #be185d;
+            margin-bottom: 0.25rem;
+        }
         [data-testid="stMetricValue"] {
             color: #be185d;
+            font-family: 'Baloo 2', cursive;
         }
         [data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #fff7ed 0%, #fdf2f8 100%);
+            background: linear-gradient(180deg, #fff7ed 0%, #fef2f2 60%, #fdf2f8 100%);
             border-right: 1px solid #fed7e2;
+        }
+        [data-testid="stSidebar"] * {
+            font-family: 'Nunito', sans-serif !important;
         }
         </style>
         """,
@@ -130,12 +158,35 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Run Settings")
-        max_frames = st.slider("Max Frames", min_value=1, max_value=50000, value=1000, step=50)
+        max_frames = st.slider("Max Frames", min_value=1000, max_value=5000, value=1000, step=100)
+        detector_backend = st.selectbox("Detector", options=["classic", "yolo", "triton"], index=0)
+        tracker_options = ["kalman"]
+        if detector_backend == "yolo":
+            tracker_options = ["kalman", "bytetrack", "botsort", "deepsort"]
+        tracker_backend = st.selectbox("Tracker", options=tracker_options, index=0)
+        yolo_model = "yolov8n.pt"
+        yolo_conf = 0.08
+        yolo_iou = 0.5
+        yolo_imgsz = 960
+        yolo_class_id = 32
+        yolo_class_fallback = True
+        if detector_backend == "yolo":
+            yolo_model = st.text_input("YOLO Model", value="yolov8n.pt")
+            yolo_conf = st.slider("YOLO Conf", min_value=0.01, max_value=0.90, value=0.08, step=0.01)
+            yolo_iou = st.slider("YOLO IoU", min_value=0.10, max_value=0.90, value=0.50, step=0.01)
+            yolo_imgsz = st.select_slider("YOLO Img Size", options=[640, 768, 896, 960, 1024, 1280], value=960)
+            yolo_class_id = st.number_input("YOLO Class ID", min_value=0, max_value=999, value=32, step=1)
+            yolo_class_fallback = st.checkbox("YOLO Class Fallback", value=True)
+        triton_url = "localhost:8000"
+        triton_model_name = "basketball_yolo_trt"
+        if detector_backend == "triton":
+            triton_url = st.text_input("Triton URL", value="localhost:8000")
+            triton_model_name = st.text_input("Triton Model", value="basketball_yolo_trt")
         save_output = st.checkbox("Save Annotated Video", value=False)
         output_path_value = str(default_output)
         if save_output:
             output_path_value = st.text_input("Output Path", value=str(default_output))
-        st.caption("Tip: Start with 200-500 frames to test quickly.")
+        st.caption("Tip: Keep max frames between 1000 and 5000 for consistent comparisons.")
 
     left, right = st.columns([1.2, 1.8], gap="large")
     path_value = str(default_video)
@@ -205,6 +256,16 @@ def main() -> None:
                     quiet=True,
                     show=False,
                     save_video=save_video,
+                    detector_backend=detector_backend,
+                    tracker_backend=tracker_backend,
+                    yolo_model=yolo_model,
+                    yolo_conf=float(yolo_conf),
+                    yolo_iou=float(yolo_iou),
+                    yolo_imgsz=int(yolo_imgsz),
+                    yolo_class_id=int(yolo_class_id),
+                    yolo_class_fallback=bool(yolo_class_fallback),
+                    triton_url=triton_url,
+                    triton_model_name=triton_model_name,
                 )
 
             result["input_mode"] = input_used
@@ -227,6 +288,24 @@ def main() -> None:
                 st.success("Analysis completed.")
                 st.caption(f"Video: {result['video_path']}")
                 st.caption(f"Input mode: {result['input_mode']} | Run at: {result['run_at']}")
+                st.caption(
+                    f"Pipeline: detector={result.get('detector_backend', 'n/a')}, "
+                    f"tracker={result.get('tracker_backend', 'n/a')}"
+                )
+                for warn in result.get("warnings", []):
+                    st.warning(warn)
+
+                report_line = build_report_line(result, quality_label, quality_score)
+                st.markdown(
+                    f"""
+                    <div class="report-card">
+                        <div class="report-title">Report Summary Line</div>
+                        <div>{report_line}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                st.code(report_line, language="text")
 
             with raw_placeholder.expander("Raw JSON", expanded=False):
                 st.json(result)

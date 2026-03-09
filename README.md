@@ -7,12 +7,12 @@ Computer vision project for analyzing basketball dribbling video with a reusable
 ```text
 Basketball Dribble Analysis/
 +-- Code/
-¦   +-- Code.py
-¦   +-- api.py
-¦   +-- streamlit_app.py
-¦   +-- ui.py
+|   +-- Code.py
+|   +-- api.py
+|   +-- streamlit_app.py
+|   +-- ui.py
 +-- dataset/
-¦   +-- WHATSAAP ASSIGNMENT.mp4
+|   +-- WHATSAAP ASSIGNMENT.mp4
 +-- Internship _Assignment.pdf
 
 ARCHITECTURE.md
@@ -90,11 +90,6 @@ Open:
 
 - `http://127.0.0.1:8501`
 
-## Tkinter UI Run
-
-```bash
-python "Basketball Dribble Analysis/Code/ui.py"
-```
 
 ## Notes
 

@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-03-09 10:16:47",
+  "video_path": "C:\\Users\\pc\\Downloads\\Computer-Vision-Projects\\Basketball Dribble Analysis\\dataset\\WHATSAAP ASSIGNMENT.mp4",
+  "max_frames": 120,
+  "results": [
+    {
+      "video_path": "C:\\Users\\pc\\Downloads\\Computer-Vision-Projects\\Basketball Dribble Analysis\\dataset\\WHATSAAP ASSIGNMENT.mp4",
+      "processed_frames": 120,
+      "estimated_bounces": 7,
+      "missed_detections": 0,
+      "average_smoothed_speed_m_s": 1.1441,
+      "elapsed_seconds": 5.002,
+      "processing_seconds": 0.776,
+      "detector_backend": "classic",
+      "tracker_backend": "kalman",
+      "triton_url": "",
+      "triton_model_name": "",
+      "warnings": [],
+      "case": "classic_kalman"
+    },
+    {
+      "video_path": "C:\\Users\\pc\\Downloads\\Computer-Vision-Projects\\Basketball Dribble Analysis\\dataset\\WHATSAAP ASSIGNMENT.mp4",
+      "processed_frames": 120,
+      "estimated_bounces": 7,
+      "missed_detections": 0,
+      "average_smoothed_speed_m_s": 1.1441,
+      "elapsed_seconds": 5.002,
+      "processing_seconds": 0.759,
+      "detector_backend": "classic",
+      "tracker_backend": "kalman",
+      "triton_url": "",
+      "triton_model_name": "",
+      "warnings": [
+        "YOLO unavailable, fallback to classic detector: YOLO backend requested, but 'ultralytics' is not installed.",
+        "External tracker requested without YOLO detector. Falling back to Kalman-only tracking."
+      ],
+      "case": "yolo_botsort"
+    },
+    {
+      "video_path": "C:\\Users\\pc\\Downloads\\Computer-Vision-Projects\\Basketball Dribble Analysis\\dataset\\WHATSAAP ASSIGNMENT.mp4",
+      "processed_frames": 120,
+      "estimated_bounces": 7,
+      "missed_detections": 0,
+      "average_smoothed_speed_m_s": 1.1441,
+      "elapsed_seconds": 5.002,
+      "processing_seconds": 0.716,
+      "detector_backend": "classic",
+      "tracker_backend": "kalman",
+      "triton_url": "",
+      "triton_model_name": "",
+      "warnings": [
+        "YOLO unavailable, fallback to classic detector: YOLO backend requested, but 'ultralytics' is not installed."
+      ],
+      "case": "yolo_kalman"
+    },
+    {
+      "video_path": "C:\\Users\\pc\\Downloads\\Computer-Vision-Projects\\Basketball Dribble Analysis\\dataset\\WHATSAAP ASSIGNMENT.mp4",
+      "processed_frames": 120,
+      "estimated_bounces": 7,
+      "missed_detections": 0,
+      "average_smoothed_speed_m_s": 1.1441,
+      "elapsed_seconds": 5.002,
+      "processing_seconds": 0.692,
+      "detector_backend": "classic",
+      "tracker_backend": "kalman",
+      "triton_url": "",
+      "triton_model_name": "",
+      "warnings": [
+        "Triton unavailable, fallback to classic detector: Triton backend requested, but 'tritonclient[http]' is not installed."
+      ],
+      "case": "triton_kalman"
+    }
+  ]
+}

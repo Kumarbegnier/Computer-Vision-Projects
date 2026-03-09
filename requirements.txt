@@ -1,0 +1,15 @@
+numpy
+opencv-python
+
+fastapi
+uvicorn
+python-multipart
+pydantic
+
+streamlit
+
+ultralytics
+supervision
+deep-sort-realtime
+
+tritonclient[http]

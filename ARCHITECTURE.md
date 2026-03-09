@@ -1,99 +1,161 @@
 # Architecture
 
-## 1) System Overview
+## 1) System Goal
 
-This project is built around a single reusable analysis engine and multiple interfaces.
+Production-ready basketball dribble analytics with:
+- robust detection (YOLO / Triton / classic fallback),
+- robust tracking (BoT-SORT / ByteTrack / DeepSORT / Kalman),
+- custom bounce logic,
+- multiple runtime interfaces (CLI, API, Streamlit),
+- deployment paths (TensorRT, Triton, DeepStream 8).
 
-- Core CV engine: `Basketball Dribble Analysis/Code/Code.py`
-- REST API interface: `Basketball Dribble Analysis/Code/api.py`
-- Streamlit web UI: `Basketball Dribble Analysis/Code/streamlit_app.py`
-- Tkinter desktop UI: `Basketball Dribble Analysis/Code/ui.py`
+## 2) High-Level Layout
 
-All interfaces call the same function: `analyze_video(...)`.
+Core code:
+- `Basketball Dribble Analysis/Code/Code.py`
+- `Basketball Dribble Analysis/Code/api.py`
+- `Basketball Dribble Analysis/Code/streamlit_app.py`
+- `Basketball Dribble Analysis/Code/io_utils.py`
 
-## 2) Module Responsibilities
+Deployment code:
+- `Basketball Dribble Analysis/Deployment/TRAINING/*`
+- `Basketball Dribble Analysis/Deployment/TRITON/*`
+- `Basketball Dribble Analysis/Deployment/DEEPSTREAM/*`
 
-### Core Engine (`Code.py`)
+## 3) Runtime Architecture
 
-- Ball candidate generation
-  - HSV color segmentation for orange basketball
-  - contour-based shape filtering
-  - Hough circle fallback
-- Tracking
-  - Kalman filter (`BallTracker`) for smooth center estimation
-- Event detection
-  - bounce detection using 3-point trajectory peak logic
-- Metrics
-  - processed frames
-  - estimated bounces
-  - missed detections
-  - smoothed speed (px/s, m/s approx)
-- Optional outputs
-  - annotated output video
+### 3.1 Inference Pipeline
 
-### API (`api.py`)
+Per frame flow in `analyze_video(...)`:
+1. Frame read
+2. Detection backend
+- `classic`: HSV + contour + Hough circle
+- `yolo`: local Ultralytics model (`YOLO.predict/track`)
+- `triton`: Triton HTTP inference client
+3. Tracking backend
+- `kalman` (always available)
+- `bytetrack` / `botsort` (via YOLO track mode)
+- `deepsort` (optional external tracker path)
+4. Kalman smoothing (`BallTracker`)
+5. Metrics update (speed, misses, radius stats)
+6. Bounce estimation from `y` trajectory peaks
+7. Optional annotated video write
 
-- `GET /` : service metadata
-- `GET /health` : liveness check
-- `POST /analyze` : JSON input (`video_path`, `max_frames`, `save_video_path`)
-- `POST /analyze-input` : multipart input (`video_path` or `video_url` or `video_file`)
-- Handles temporary files for URL/upload mode and cleanup in `finally`
+### 3.2 Backend Selection Rules
 
-### Streamlit UI (`streamlit_app.py`)
+- If requested backend dependency is missing, system falls back to `classic + kalman`.
+- Fallback reasons are returned in `warnings` field.
+- This keeps API/UI stable in partially provisioned environments.
 
-- Input modes: Path / URL / Upload
-- Run settings in sidebar
-- Metric cards + detection quality bar
-- Raw JSON + download button
-- Recent run history in session state
+## 4) Interface Layer
 
-### Tkinter UI (`ui.py`)
+### CLI
 
-- Desktop form-based runner
-- Uses worker thread for non-blocking analysis
-- Displays summarized results in text area
+`Code.py` CLI options expose:
+- `detector_backend`
+- `tracker_backend`
+- `yolo_model`
+- `triton_url`
+- `triton_model_name`
 
-## 3) Data Contracts
+### API (FastAPI)
 
-`analyze_video(...)` returns:
+`api.py` endpoints:
+- `GET /health`
+- `POST /analyze`
+- `POST /analyze-input`
+
+API supports:
+- local path / upload / URL input,
+- secure URL handling via `io_utils.py`,
+- same backend knobs as CLI,
+- validation + cleanup + error mapping.
+
+### Streamlit
+
+`streamlit_app.py` provides:
+- Path/URL/Upload input,
+- runtime backend selectors,
+- model/server config inputs,
+- metric dashboard + warnings + run history.
+
+## 5) Data Contracts
+
+Primary analysis output:
 
 ```json
 {
   "video_path": "...",
-  "processed_frames": 1000,
-  "estimated_bounces": 6,
-  "missed_detections": 1,
-  "average_smoothed_speed_m_s": 0.1894,
-  "elapsed_seconds": 6.656
+  "processed_frames": 1520,
+  "estimated_bounces": 102,
+  "missed_detections": 2,
+  "average_smoothed_speed_m_s": 2.69,
+  "elapsed_seconds": 63.36,
+  "processing_seconds": 8.9,
+  "detector_backend": "classic",
+  "tracker_backend": "kalman",
+  "triton_url": "",
+  "triton_model_name": "",
+  "warnings": []
 }
 ```
 
-## 4) Runtime Dependencies
+## 6) Training and Optimization Architecture
 
-- Python 3.8+
-- `opencv-python`
-- `numpy`
-- `fastapi`
-- `uvicorn`
-- `python-multipart` (required for file upload/form endpoints)
-- `streamlit` (for Streamlit UI)
+### 6.1 Fine-tuning
 
-## 5) Architectural Decisions
+- Script: `Deployment/TRAINING/train_finetune.py`
+- Dataset contract: `Deployment/TRAINING/data.yaml`
+- Output: trained YOLO checkpoint (`best.pt`)
 
-- Single processing core avoids duplication across CLI/API/UIs.
-- Heuristic CV + Kalman approach keeps runtime lightweight (no heavy model dependency).
-- API supports local path, URL, and upload to simplify integration.
-- Temporary files are cleaned up after processing.
+### 6.2 TensorRT
 
-## 6) Future Advanced Architecture
+- Script: `Deployment/TRAINING/export_tensorrt.py`
+- Output: TensorRT plan (`model.plan`)
 
-Recommended next step:
+## 7) Serving Architecture
 
-- Split into packages:
-  - `core/` (detection, tracking, events)
-  - `service/` (analysis orchestration, config)
-  - `interfaces/` (api/ui/cli)
-  - `tests/` (unit + regression videos)
-- Add async job queue for long video analysis (`job_id` pattern)
-- Add frame-level CSV/event timeline outputs
-- Replace heuristic detector with trained detector (YOLO/RT-DETR) for robustness
+### 7.1 Triton
+
+- Model repo template:
+`Deployment/TRITON/model_repository/basketball_yolo_trt`
+- Config:
+`config.pbtxt` with `images -> detections` contract
+- Client example:
+`Deployment/TRITON/client/infer_http.py`
+
+### 7.2 DeepStream 8
+
+Templates:
+- `Deployment/DEEPSTREAM/deepstream_app_config.txt`
+- `Deployment/DEEPSTREAM/config_infer_primary_yolo.txt`
+
+DeepStream pipeline path is for GPU-native, low-latency production streaming.
+
+## 8) Reliability and Security Controls
+
+- URL ingestion validation blocks unsafe/private hosts.
+- Size limits and timeout on remote downloads.
+- Temp file lifecycle cleanup.
+- Graceful degradation when optional dependencies are unavailable.
+
+## 9) Recommended Production Modes
+
+1. Best practical local mode:
+- `detector_backend=yolo`
+- `tracker_backend=botsort`
+
+2. Scalable service mode:
+- `detector_backend=triton`
+- `tracker_backend=kalman` (or DS pipeline if using DeepStream end-to-end)
+
+3. Guaranteed fallback mode:
+- `detector_backend=classic`
+- `tracker_backend=kalman`
+
+## 10) Next Engineering Steps
+
+- Add unit tests for backend selection and bounce logic.
+- Add regression suite with labeled clips.
+- Add structured logging and request IDs in API.
+- Add async job queue for long videos (`job_id` + status polling).

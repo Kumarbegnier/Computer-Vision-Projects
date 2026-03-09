@@ -1,0 +1,26 @@
+name: "basketball_yolo_trt"
+platform: "tensorrt_plan"
+max_batch_size: 1
+
+input [
+  {
+    name: "images"
+    data_type: TYPE_UINT8
+    dims: [ 640, 640, 3 ]
+  }
+]
+
+output [
+  {
+    name: "detections"
+    data_type: TYPE_FP32
+    dims: [ -1, 6 ]
+  }
+]
+
+instance_group [
+  {
+    count: 1
+    kind: KIND_GPU
+  }
+]
